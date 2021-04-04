@@ -54,6 +54,7 @@ class Browser:
 
     def scrollup(self, e):
         self.scroll -= SCROLL_STEP
+        self.scroll = max(self.scroll, 0)
         self.render()
 
 
