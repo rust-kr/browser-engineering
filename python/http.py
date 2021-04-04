@@ -70,9 +70,3 @@ def lex(body):
         elif not in_angle:
              text += c
     return text
-
-
-if __name__ == "__main__":
-    # 15. Run from command line
-    import sys
-    load(sys.argv[1])
