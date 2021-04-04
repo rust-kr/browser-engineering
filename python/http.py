@@ -1,5 +1,6 @@
 import socket
 
+
 def request(url):
     # 1. Parse scheme
     scheme, url = url.split("://", 1)
@@ -51,23 +52,21 @@ def request(url):
     # 12. Return
     return headers, body
 
-def show(body):
-    # 13. Print content
-    in_angle = False
-    for c in body:
-        if c == "<":
-            in_angle = True
-        elif c == ">":
-            in_angle = False
-        elif not in_angle:
-            print(c, end="")
 
 def load(url):
     # 14. Wire up
     headers, body = request(url)
     show(body)
 
-if __name__ == "__main__":
-    # 15. Run from command line
-    import sys
-    load(sys.argv[1])
+
+def lex(body):
+    text = ''
+    in_angle = False
+    for c in body:
+        if c == '<':
+            in_angle = True
+        elif c == '>':
+            in_angle = False
+        elif not in_angle:
+             text += c
+    return text
