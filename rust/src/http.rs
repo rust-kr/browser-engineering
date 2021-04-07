@@ -55,13 +55,13 @@ fn split2<'a>(string: &'a str, delimiter: &str) -> Option<(&'a str, &'a str)> {
     Some((split.next()?, split.next()?))
 }
 
-fn request(url: &str) -> (HashMap<String, String>, Vec<u8>) {
+pub fn request(url: &str) -> (HashMap<String, String>, Vec<u8>) {
     // 1. Parse scheme
     let (scheme, url) = split2(url, "://").expect(MALFORMED_URL);
     let port = match scheme {
         "http" => 80,
         "https" => 443,
-        _ => panic!("Unknown scheme {}", scheme)
+        _ => panic!("Unknown scheme {}", scheme),
     };
 
     // 2. Parse host
@@ -110,7 +110,7 @@ fn request(url: &str) -> (HashMap<String, String>, Vec<u8>) {
     // 9. Check status
     match status {
         "200" => (),
-        _ => panic!("{}: {}", status, explanation)
+        _ => panic!("{}: {}", status, explanation),
     };
 
     // 10. Parse headers
@@ -134,30 +134,20 @@ fn request(url: &str) -> (HashMap<String, String>, Vec<u8>) {
     (headers, body)
 }
 
-fn show(body: &[u8]) {
+pub fn lex(body: &[u8]) -> String {
     // 13. Print content
     let mut in_angle = false;
+    let mut ret = String::new();
     for c in body {
         match *c {
             b'<' => in_angle = true,
             b'>' => in_angle = false,
             _ => {
                 if !in_angle {
-                    print!("{}", *c as char);
+                    ret.push(*c as char);
                 }
             }
         }
     }
-}
-
-fn load(url: &str) {
-    // 14. Wire up
-    let (_headers, body) = request(url);
-    show(&body);
-}
-
-fn main() {
-    // 15. Run from command line
-    let args: Vec<String> = std::env::args().collect();
-    load(&args[1]);
+    ret
 }

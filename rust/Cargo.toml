@@ -3,13 +3,20 @@ name = "browser-engineering"
 version = "0.1.0"
 edition = "2018"
 authors = [
-  "Seo Sanghyeon <sanxiyn@gmail.com>"
+  "Seo Sanghyeon <sanxiyn@gmail.com>",
+  "Dong-hee Na <donghee.na92@gmail.com",
 ]
 
-[[example]]
+[lib]
 name = "http"
+path = "src/http.rs"
+
+[[bin]]
+name = "browser"
+path = "src/main.rs"
 
 [dependencies]
+druid = "0.7.0"
 rustls = "0.19"
 webpki = "0.21"
 webpki-roots = "0.21"
