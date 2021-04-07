@@ -8,3 +8,8 @@ authors = [
 
 [[example]]
 name = "http"
+
+[dependencies]
+rustls = "0.19"
+webpki = "0.21"
+webpki-roots = "0.21"
