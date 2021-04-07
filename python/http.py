@@ -1,4 +1,5 @@
 import socket
+import ssl
 
 
 def request(url):
@@ -18,6 +19,9 @@ def request(url):
 
     # 4. Connect
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+    if scheme == "https":
+        ctx = ssl.create_default_context()
+        s = ctx.wrap_socket(s, server_hostname=host)
     s.connect((host, port))
 
     # 5. Send request
