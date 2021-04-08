@@ -4,11 +4,11 @@ use druid::{AppLauncher, Color, LocalizedString, WindowDesc};
 use http::{lex, request};
 use std::cmp;
 
-static WIDTH: i32 = 800;
-static HEIGHT: i32 = 600;
-static HSTEP: i32 = 13;
-static VSTEP: i32 = 12;
-static SCROLL_STEP: i32 = 100;
+const WIDTH: i32 = 800;
+const HEIGHT: i32 = 600;
+const HSTEP: i32 = 13;
+const VSTEP: i32 = 12;
+const SCROLL_STEP: i32 = 100;
 
 struct Character {
     x: i32,
