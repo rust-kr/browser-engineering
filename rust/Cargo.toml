@@ -8,8 +8,8 @@ authors = [
 ]
 
 [lib]
-name = "http"
-path = "src/http.rs"
+name = "lib"
+path = "src/lib.rs"
 
 [[bin]]
 name = "browser"
