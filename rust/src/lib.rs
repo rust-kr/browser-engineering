@@ -4,6 +4,7 @@ pub mod http {
     use std::net::TcpStream;
     use std::sync::Arc;
 
+    use flate2::bufread::GzDecoder;
     use rustls::{ClientConfig, ClientSession, StreamOwned};
     use webpki::DNSNameRef;
 
@@ -94,8 +95,16 @@ pub mod http {
         };
 
         // 5. Send request
-        write!(stream, "GET {} HTTP/1.0\r\n", path).expect(CONNECTION_ERROR);
-        write!(stream, "Host: {}\r\n\r\n", host).expect(CONNECTION_ERROR);
+        write!(
+            stream,
+            "GET {} HTTP/1.0\r
+Host: {}\r
+Accept-Encoding: deflate\r
+\r
+",
+            path, host
+        )
+        .expect(CONNECTION_ERROR);
 
         // 6. Receive response
         let mut reader = BufReader::new(stream);
@@ -116,6 +125,7 @@ pub mod http {
 
         // 10. Parse headers
         let mut headers = HashMap::new();
+        let mut gzipped = false;
         loop {
             line.clear();
             reader.read_line(&mut line).expect(MALFORMED_RESPONSE);
@@ -123,12 +133,25 @@ pub mod http {
                 break;
             }
             let (header, value) = split2(&line, ":").expect(MALFORMED_RESPONSE);
-            headers.insert(header.to_ascii_lowercase(), value.trim().to_string());
+            let header = header.to_ascii_lowercase();
+            let value = value.trim();
+            if header == "content-encoding" {
+                gzipped = value.eq_ignore_ascii_case("gzip");
+            }
+            headers.insert(header, value.to_string());
         }
+
+        dbg!(&headers, gzipped);
 
         // 11. Read body
         let mut body = Vec::new();
-        reader.read_to_end(&mut body).expect(MALFORMED_RESPONSE);
+        if gzipped {
+            GzDecoder::new(reader)
+                .read_to_end(&mut body)
+                .expect(MALFORMED_RESPONSE);
+        } else {
+            reader.read_to_end(&mut body).expect(MALFORMED_RESPONSE);
+        }
         // In Rust, connection is closed when stream is dropped
 
         // 12. Return
