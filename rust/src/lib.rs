@@ -4,6 +4,7 @@ pub mod http {
     use std::net::TcpStream;
     use std::sync::Arc;
 
+    use flate2::bufread::{DeflateDecoder, GzDecoder};
     use rustls::{ClientConfig, ClientSession, StreamOwned};
     use webpki::DNSNameRef;
 
@@ -11,6 +12,7 @@ pub mod http {
     const MALFORMED_URL: &str = "Malformed URL";
     const CONNECTION_ERROR: &str = "Connection error";
     const MALFORMED_RESPONSE: &str = "Malformed response";
+    const UNSUPPORTED_ENCODING: &str = "Unsupported encoding";
 
     enum Stream {
         Tcp(TcpStream),
@@ -45,6 +47,38 @@ pub mod http {
             match self {
                 Self::Tcp(stream) => stream.flush(),
                 Self::Tls(stream) => stream.flush(),
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    enum ContentEncoding {
+        Gzip,
+        Compress,
+        Deflate,
+        Identity,
+        Brotli,
+    }
+
+    #[derive(Debug)]
+    struct EncodingError;
+
+    impl std::str::FromStr for ContentEncoding {
+        type Err = EncodingError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            if "gzip".eq_ignore_ascii_case(s) {
+                Ok(Self::Gzip)
+            } else if "compress".eq_ignore_ascii_case(s) {
+                Ok(Self::Compress)
+            } else if "deflate".eq_ignore_ascii_case(s) {
+                Ok(Self::Deflate)
+            } else if "identity".eq_ignore_ascii_case(s) {
+                Ok(Self::Identity)
+            } else if "br".eq_ignore_ascii_case(s) {
+                Ok(Self::Brotli)
+            } else {
+                Err(EncodingError)
             }
         }
     }
@@ -94,8 +128,16 @@ pub mod http {
         };
 
         // 5. Send request
-        write!(stream, "GET {} HTTP/1.0\r\n", path).expect(CONNECTION_ERROR);
-        write!(stream, "Host: {}\r\n\r\n", host).expect(CONNECTION_ERROR);
+        write!(
+            stream,
+            "GET {} HTTP/1.0\r
+Host: {}\r
+Accept-Encoding: gzip,deflate\r
+\r
+",
+            path, host
+        )
+        .expect(CONNECTION_ERROR);
 
         // 6. Receive response
         let mut reader = BufReader::new(stream);
@@ -116,6 +158,7 @@ pub mod http {
 
         // 10. Parse headers
         let mut headers = HashMap::new();
+        let mut encoding = ContentEncoding::Identity;
         loop {
             line.clear();
             reader.read_line(&mut line).expect(MALFORMED_RESPONSE);
@@ -123,12 +166,34 @@ pub mod http {
                 break;
             }
             let (header, value) = split2(&line, ":").expect(MALFORMED_RESPONSE);
-            headers.insert(header.to_ascii_lowercase(), value.trim().to_string());
+            let header = header.to_ascii_lowercase();
+            let value = value.trim();
+            if header == "content-encoding" {
+                encoding = value.parse().expect(UNSUPPORTED_ENCODING);
+            }
+            headers.insert(header, value.to_string());
         }
 
         // 11. Read body
         let mut body = Vec::new();
-        reader.read_to_end(&mut body).expect(MALFORMED_RESPONSE);
+        match encoding {
+            ContentEncoding::Gzip => {
+                GzDecoder::new(reader)
+                    .read_to_end(&mut body)
+                    .expect(MALFORMED_RESPONSE);
+            }
+            ContentEncoding::Deflate => {
+                DeflateDecoder::new(reader)
+                    .read_to_end(&mut body)
+                    .expect(MALFORMED_RESPONSE);
+            }
+            ContentEncoding::Identity => {
+                reader.read_to_end(&mut body).expect(MALFORMED_RESPONSE);
+            }
+            _ => {
+                panic!("{}", UNSUPPORTED_ENCODING);
+            }
+        }
         // In Rust, connection is closed when stream is dropped
 
         // 12. Return
