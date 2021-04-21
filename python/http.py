@@ -25,22 +25,25 @@ def request(url):
         port = int(port)
 
     # 4. Connect
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP) as s:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP) as sock:
         if scheme == "https":
             ctx = ssl.create_default_context()
-            s = ctx.wrap_socket(s, server_hostname=host)
+            with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                return _get_headers_and_body(ssock, host, port, path)
+        return _get_headers_and_body(sock, host, port, path)
 
-        s.connect((host, port))
 
-        # 5. Send request
-        s.send(f"GET {path} HTTP/1.0\r\n".encode())
-        s.send(f"Host: {host}\r\n".encode())
-        s.send("Accept-Encoding: br,gzip,deflate\r\n".encode())
-        s.send("\r\n".encode())
+def _get_headers_and_body(sock, host, port, path):
+    sock.connect((host, port))
 
-        # 6. Receive response
-        response = s.makefile("rb", newline="\r\n")
+    # 5. Send request
+    sock.send(f"GET {path} HTTP/1.0\r\n".encode())
+    sock.send(f"Host: {host}\r\n".encode())
+    sock.send("Accept-Encoding: br,gzip,deflate\r\n".encode())
+    sock.send("\r\n".encode())
 
+    # 6. Receive response
+    with sock.makefile("rb", newline="\r\n") as response:
         # 7. Read status line
         line = response.readline().decode()
         # 8. Parse status line
@@ -55,6 +58,7 @@ def request(url):
             line = response.readline().decode()
             if line == "\r\n":
                 break
+
             header, value = line.split(":", 1)
             headers[header.lower()] = value.strip()
 
@@ -62,8 +66,8 @@ def request(url):
         if "content-encoding" in headers:
             encoding = headers["content-encoding"]
             body = decompress(body, encoding)
-            body = body.decode()
 
+        body = body.decode()
         # 12. Return
         return headers, body
 
