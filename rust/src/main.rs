@@ -2,6 +2,7 @@ use druid::{AppLauncher, LocalizedString, WindowDesc};
 use lib::display::BrowserWidget;
 use lib::http::{lex, request};
 
+const APP_NAME: &str = "Browser-engineering";
 struct BrowserApplication {}
 
 impl BrowserApplication {
@@ -10,7 +11,7 @@ impl BrowserApplication {
         let text = lex(&body);
         let browser_widget = || -> BrowserWidget { BrowserWidget::new(text) };
         let window = WindowDesc::new(browser_widget)
-            .title(LocalizedString::new("Browser-engineering"))
+            .title(LocalizedString::new(APP_NAME))
             .window_size((BrowserWidget::get_width(), BrowserWidget::get_height()));
         AppLauncher::with_window(window)
             .use_simple_logger()
@@ -20,7 +21,14 @@ impl BrowserApplication {
 }
 
 pub fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    use clap::{App, Arg};
+    let matches = App::new(APP_NAME)
+        .arg(Arg::with_name("url").value_name("URL").takes_value(true))
+        .get_matches();
+    let url = matches
+        .value_of("url")
+        .expect("required argument at the moment");
+
     let app = BrowserApplication {};
-    app.run(&args[1]);
+    app.run(url);
 }
