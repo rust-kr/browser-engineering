@@ -90,30 +90,38 @@ pub mod http {
         Some((split.next()?, split.next()?))
     }
 
-    pub fn request(url: &str) -> (HashMap<String, String>, Vec<u8>) {
+    pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), &'static str> {
         // 1. Parse scheme
-        let (scheme, url) = split2(url, "://").expect(MALFORMED_URL);
-        let port = match scheme {
+        let (scheme, url) = split2(url, ":").unwrap_or(("https", url));
+        let default_port = match scheme {
             "http" => 80,
             "https" => 443,
+            "data" => {
+                // Exercise data scheme
+                let (content_type, body) = split2(url, ",").ok_or(MALFORMED_URL)?;
+                let mut headers = HashMap::new();
+                headers.insert("content-type".to_owned(), content_type.to_owned());
+                return Ok((headers, body.as_bytes().to_vec()));
+            }
             _ => panic!("Unknown scheme {}", scheme),
         };
+        let url = url.strip_prefix("//").unwrap_or(url);
 
         // 2. Parse host
-        let (host, path) = split2(url, "/").expect(MALFORMED_URL);
+        let (host, path) = split2(url, "/").ok_or(MALFORMED_URL)?;
         let path = format!("/{}", path);
 
         // 3. Parse port
-        let (host, port) = if host.contains(":") {
-            let (host, port) = split2(host, ":").expect(UNREACHABLE);
-            let port = port.parse().expect(MALFORMED_URL);
+        let (host, port) = if host.contains(':') {
+            let (host, port) = split2(host, ":").ok_or(UNREACHABLE)?;
+            let port = port.parse().map_err(|_| MALFORMED_URL)?;
             (host, port)
         } else {
-            (host, port)
+            (host, default_port)
         };
 
         // 4. Connect
-        let stream = TcpStream::connect((host, port)).expect(CONNECTION_ERROR);
+        let stream = TcpStream::connect((host, port)).map_err(|_| CONNECTION_ERROR)?;
         let mut stream = if scheme != "https" {
             Stream::Tcp(stream)
         } else {
@@ -121,7 +129,7 @@ pub mod http {
             config
                 .root_store
                 .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-            let host = DNSNameRef::try_from_ascii_str(host).expect(MALFORMED_URL);
+            let host = DNSNameRef::try_from_ascii_str(host).map_err(|_| MALFORMED_URL)?;
             let client = ClientSession::new(&Arc::new(config), host);
             let stream = StreamOwned::new(client, stream);
             Stream::Tls(stream)
@@ -137,18 +145,20 @@ Accept-Encoding: gzip,deflate\r
 ",
             path, host
         )
-        .expect(CONNECTION_ERROR);
+        .map_err(|_| CONNECTION_ERROR)?;
 
         // 6. Receive response
         let mut reader = BufReader::new(stream);
 
         // 7. Read status line
         let mut line = String::new();
-        reader.read_line(&mut line).expect(MALFORMED_RESPONSE);
+        reader
+            .read_line(&mut line)
+            .map_err(|_| MALFORMED_RESPONSE)?;
 
         // 8. Parse status line
-        let (_version, status) = split2(&line, " ").expect(MALFORMED_RESPONSE);
-        let (status, explanation) = split2(status, " ").expect(MALFORMED_RESPONSE);
+        let (_version, status) = split2(&line, " ").ok_or(MALFORMED_RESPONSE)?;
+        let (status, explanation) = split2(status, " ").ok_or(MALFORMED_RESPONSE)?;
 
         // 9. Check status
         match status {
@@ -161,15 +171,17 @@ Accept-Encoding: gzip,deflate\r
         let mut encoding = ContentEncoding::Identity;
         loop {
             line.clear();
-            reader.read_line(&mut line).expect(MALFORMED_RESPONSE);
+            reader
+                .read_line(&mut line)
+                .map_err(|_| MALFORMED_RESPONSE)?;
             if line == "\r\n" {
                 break;
             }
-            let (header, value) = split2(&line, ":").expect(MALFORMED_RESPONSE);
+            let (header, value) = split2(&line, ":").ok_or(MALFORMED_RESPONSE)?;
             let header = header.to_ascii_lowercase();
             let value = value.trim();
             if header == "content-encoding" {
-                encoding = value.parse().expect(UNSUPPORTED_ENCODING);
+                encoding = value.parse().map_err(|_| UNSUPPORTED_ENCODING)?;
             }
             headers.insert(header, value.to_string());
         }
@@ -180,15 +192,17 @@ Accept-Encoding: gzip,deflate\r
             ContentEncoding::Gzip => {
                 GzDecoder::new(reader)
                     .read_to_end(&mut body)
-                    .expect(MALFORMED_RESPONSE);
+                    .map_err(|_| MALFORMED_RESPONSE)?;
             }
             ContentEncoding::Deflate => {
                 DeflateDecoder::new(reader)
                     .read_to_end(&mut body)
-                    .expect(MALFORMED_RESPONSE);
+                    .map_err(|_| MALFORMED_RESPONSE)?;
             }
             ContentEncoding::Identity => {
-                reader.read_to_end(&mut body).expect(MALFORMED_RESPONSE);
+                reader
+                    .read_to_end(&mut body)
+                    .map_err(|_| MALFORMED_RESPONSE)?;
             }
             _ => {
                 panic!("{}", UNSUPPORTED_ENCODING);
@@ -197,7 +211,7 @@ Accept-Encoding: gzip,deflate\r
         // In Rust, connection is closed when stream is dropped
 
         // 12. Return
-        (headers, body)
+        Ok((headers, body))
     }
 
     pub fn lex(body: &[u8]) -> String {
@@ -264,10 +278,10 @@ pub mod display {
                 }
             }
             BrowserWidget {
-                display_list: display_list,
+                display_list,
                 scroll: 0,
                 min_scroll: 0,
-                max_scroll: max_scroll,
+                max_scroll,
             }
         }
 
