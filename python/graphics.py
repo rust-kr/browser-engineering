@@ -9,21 +9,16 @@ SCROLL_STEP = 100
 
 
 class Browser:
-
     def __init__(self):
         self.window = tkinter.Tk()
         self.scroll = 0
         self.min_scroll = 0
         self.max_scroll = 0
-        self.window.title('Browser-engineering')
+        self.window.title("Browser-engineering")
         self.window.bind("<Up>", self.scrollup)
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<MouseWheel>", self.mousewheel)
-        self.canvas = tkinter.Canvas(
-            self.window,
-            width=WIDTH,
-            height=HEIGHT
-        )
+        self.canvas = tkinter.Canvas(self.window, width=WIDTH, height=HEIGHT)
         self.canvas.pack()
 
     def load(self, url):
@@ -39,7 +34,7 @@ class Browser:
             self.max_scroll = max(self.max_scroll, cursor_y)
             display_list.append((cursor_x, cursor_y, c))
             cursor_x += HSTEP
-            if cursor_x >= WIDTH - HSTEP or c == '\n':
+            if cursor_x >= WIDTH - HSTEP or c == "\n":
                 cursor_y += VSTEP
                 cursor_x = HSTEP
         return display_list
@@ -74,8 +69,8 @@ class Browser:
             self.render()
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     Browser().load(sys.argv[1])
     tkinter.mainloop()

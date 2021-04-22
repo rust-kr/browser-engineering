@@ -1,11 +1,18 @@
+import gzip
 import socket
 import ssl
+import zlib
+
+try:
+    import brotli
+except ImportError:
+    brotli = None
 
 
 def request(url):
     # 1. Parse scheme
     scheme, url = url.split("://", 1)
-    assert scheme in ["http", "https"], "Unknown scheme {}".format(scheme)
+    assert scheme in ["http", "https"], f"Unknown scheme {scheme}"
     port = 80 if scheme == "http" else 443
 
     # 2. Parse host
@@ -18,59 +25,76 @@ def request(url):
         port = int(port)
 
     # 4. Connect
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
-    if scheme == "https":
-        ctx = ssl.create_default_context()
-        s = ctx.wrap_socket(s, server_hostname=host)
-    s.connect((host, port))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP) as sock:
+        if scheme == "https":
+            ctx = ssl.create_default_context()
+            with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                return _get_headers_and_body(ssock, host, port, path)
+        return _get_headers_and_body(sock, host, port, path)
+
+
+def _get_headers_and_body(sock, host, port, path):
+    sock.connect((host, port))
 
     # 5. Send request
-    s.send("GET {} HTTP/1.0\r\n".format(path).encode("utf8"))
-    s.send("Host: {}\r\n\r\n".format(host).encode("utf8"))
+    sock.send(f"GET {path} HTTP/1.0\r\n".encode())
+    sock.send(f"Host: {host}\r\n".encode())
+    sock.send("Accept-Encoding: br,gzip,deflate\r\n".encode())
+    sock.send("\r\n".encode())
 
     # 6. Receive response
-    response = s.makefile("r", encoding="utf8", newline="\r\n")
+    with sock.makefile("rb", newline="\r\n") as response:
+        # 7. Read status line
+        line = response.readline().decode()
+        # 8. Parse status line
+        version, status, explanation = line.split(" ", 2)
 
-    # 7. Read status line
-    line = response.readline()
+        # 9. Check status
+        assert status == "200", f"{status}: {explanation}"
 
-    # 8. Parse status line
-    version, status, explanation = line.split(" ", 2)
+        # 10. Parse headers
+        headers = {}
+        while True:
+            line = response.readline().decode()
+            if line == "\r\n":
+                break
 
-    # 9. Check status
-    assert status == "200", "{}: {}".format(status, explanation)
+            header, value = line.split(":", 1)
+            headers[header.lower()] = value.strip()
 
-    # 10. Parse headers
-    headers = {}
-    while True:
-        line = response.readline()
-        if line == "\r\n":
-            break
-        header, value = line.split(":", 1)
-        headers[header.lower()] = value.strip()
+        body = response.read()
+        if "content-encoding" in headers:
+            encoding = headers["content-encoding"]
+            body = decompress(body, encoding)
 
-    # 11. Read body
-    body = response.read()
-    s.close()
-
-    # 12. Return
-    return headers, body
+        body = body.decode()
+        # 12. Return
+        return headers, body
 
 
-def load(url):
-    # 14. Wire up
-    headers, body = request(url)
-    show(body)
+def decompress(data, encoding):
+    if encoding == "gzip":
+        return gzip.decompress(data)
+    elif encoding == "deflate":
+        return zlib.decompress(data, wbits=-zlib.MAX_WBITS)
+    elif encoding == "br":
+        if brotli is None:
+            raise RuntimeError("please install brotli package: pip install brotli")
+        return brotli.decompress(data)
+    elif encoding == "identity":
+        return data
+    else:
+        raise RuntimeError(f"unexpected content-encoding: {encoding}")
 
 
 def lex(body):
-    text = ''
+    text = ""
     in_angle = False
     for c in body:
-        if c == '<':
+        if c == "<":
             in_angle = True
-        elif c == '>':
+        elif c == ">":
             in_angle = False
         elif not in_angle:
-             text += c
+            text += c
     return text
