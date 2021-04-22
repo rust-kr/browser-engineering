@@ -11,12 +11,17 @@ except ImportError:
 
 def request(url):
     # 1. Parse scheme
-    scheme, url = url.split("://", 1)
-    assert scheme in ["http", "https"], f"Unknown scheme {scheme}"
+    scheme, url = url.split(":", 1)
+    assert scheme in ["http", "https", "data"], f"Unknown scheme {scheme}"
     port = 80 if scheme == "http" else 443
 
+    # Exercise data scheme
+    if scheme == 'data':
+        content_type, body = url.split(",", 1)
+        return {"content-type": content_type}, body
+
     # 2. Parse host
-    host, path = url.split("/", 1)
+    host, path = url.removeprefix("//").split("/", 1)
     path = "/" + path
 
     # 3. Parse port
