@@ -92,12 +92,13 @@ pub mod http {
 
     pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), &'static str> {
         // 1. Parse scheme
-        let (scheme, url) = split2(url, "://").ok_or(MALFORMED_URL)?;
+        let (scheme, url) = split2(url, ":").unwrap_or(("https", url));
         let port = match scheme {
             "http" => 80,
             "https" => 443,
             _ => panic!("Unknown scheme {}", scheme),
         };
+        let url = url.strip_prefix("//").unwrap_or(url);
 
         // 2. Parse host
         let (host, path) = split2(url, "/").ok_or(MALFORMED_URL)?;
