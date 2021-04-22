@@ -7,7 +7,7 @@ struct BrowserApplication {}
 
 impl BrowserApplication {
     fn run(&self, url: &str) {
-        let (_headers, body) = request(&url);
+        let (_headers, body) = request(&url).unwrap_or_else(|e| panic!("{}", e));
         let text = lex(&body);
         let browser_widget = || -> BrowserWidget { BrowserWidget::new(text) };
         let window = WindowDesc::new(browser_widget)
