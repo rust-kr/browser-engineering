@@ -104,7 +104,7 @@ pub mod http {
         let path = format!("/{}", path);
 
         // 3. Parse port
-        let (host, port) = if host.contains(":") {
+        let (host, port) = if host.contains(':') {
             let (host, port) = split2(host, ":").ok_or(UNREACHABLE)?;
             let port = port.parse().map_err(|_| MALFORMED_URL)?;
             (host, port)
@@ -270,10 +270,10 @@ pub mod display {
                 }
             }
             BrowserWidget {
-                display_list: display_list,
+                display_list,
                 scroll: 0,
                 min_scroll: 0,
-                max_scroll: max_scroll,
+                max_scroll,
             }
         }
 
