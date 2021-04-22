@@ -16,7 +16,7 @@ def request(url):
     port = 80 if scheme == "http" else 443
 
     # Exercise data scheme
-    if scheme == 'data':
+    if scheme == "data":
         content_type, body = url.split(",", 1)
         return {"content-type": content_type}, body
 
