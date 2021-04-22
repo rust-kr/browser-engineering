@@ -40,11 +40,18 @@ def request(url):
 
 def _get_headers_and_body(sock, host, port, path):
     sock.connect((host, port))
+    brotli = None
+    accept_encoding = ["gzip", "deflate"]
+    if brotli is not None:
+        accept_encoding.append("br")
+    accept_encoding = ",".join(accept_encoding)
 
     # 5. Send request
-    sock.send(f"GET {path} HTTP/1.0\r\n".encode())
+    sock.send(f"GET {path} HTTP/1.1\r\n".encode())
     sock.send(f"Host: {host}\r\n".encode())
-    sock.send("Accept-Encoding: br,gzip,deflate\r\n".encode())
+    sock.send(f"Connection: close\r\n".encode())
+    sock.send(f"User-Agent: homemade-browser\r\n".encode())
+    sock.send(f"Accept-Encoding: {accept_encoding}\r\n".encode())
     sock.send("\r\n".encode())
 
     # 6. Receive response
@@ -63,7 +70,6 @@ def _get_headers_and_body(sock, host, port, path):
             line = response.readline().decode()
             if line == "\r\n":
                 break
-
             header, value = line.split(":", 1)
             headers[header.lower()] = value.strip()
 
