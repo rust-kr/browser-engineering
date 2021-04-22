@@ -93,9 +93,16 @@ pub mod http {
     pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), &'static str> {
         // 1. Parse scheme
         let (scheme, url) = split2(url, ":").unwrap_or(("https", url));
-        let port = match scheme {
+        let default_port = match scheme {
             "http" => 80,
             "https" => 443,
+            "data" => {
+                // Exercise data scheme
+                let (content_type, body) = split2(url, ",").ok_or(MALFORMED_URL)?;
+                let mut headers = HashMap::new();
+                headers.insert("content-type".to_owned(), content_type.to_owned());
+                return Ok((headers, body.as_bytes().to_vec()));
+            }
             _ => panic!("Unknown scheme {}", scheme),
         };
         let url = url.strip_prefix("//").unwrap_or(url);
@@ -110,7 +117,7 @@ pub mod http {
             let port = port.parse().map_err(|_| MALFORMED_URL)?;
             (host, port)
         } else {
-            (host, port)
+            (host, default_port)
         };
 
         // 4. Connect
