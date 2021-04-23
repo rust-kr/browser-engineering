@@ -41,9 +41,8 @@ def request(url):
 
 def _get_headers_and_body(sock, host, port, path):
     sock.connect((host, port))
-    brotli = None
     accept_encoding = ["gzip", "deflate"]
-    if brotli is not None:
+    if brotli:
         accept_encoding.append("br")
     accept_encoding = ",".join(accept_encoding)
 
