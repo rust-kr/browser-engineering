@@ -1,6 +1,7 @@
 import gzip
 import socket
 import ssl
+import sys
 import zlib
 
 try:
@@ -50,7 +51,7 @@ def _get_headers_and_body(sock, host, port, path):
     sock.send(f"GET {path} HTTP/1.1\r\n".encode())
     sock.send(f"Host: {host}\r\n".encode())
     sock.send(f"Connection: close\r\n".encode())
-    sock.send(f"User-Agent: homemade-browser\r\n".encode())
+    sock.send(f"User-Agent: Mozilla/5.0 ({sys.platform})\r\n".encode())
     sock.send(f"Accept-Encoding: {accept_encoding}\r\n".encode())
     sock.send("\r\n".encode())
 
