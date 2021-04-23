@@ -74,6 +74,11 @@ def _get_headers_and_body(sock, host, port, path):
             headers[header.lower()] = value.strip()
 
         body = response.read()
+        if "transfer-encoding" in headers:
+            encoding = headers["transfer-encoding"]
+            if encoding == "chunked":
+                body = unchunked(body)
+
         if "content-encoding" in headers:
             encoding = headers["content-encoding"]
             body = decompress(body, encoding)
@@ -81,6 +86,12 @@ def _get_headers_and_body(sock, host, port, path):
         body = body.decode()
         # 12. Return
         return headers, body
+
+
+def unchunked(data):
+    data = data.split(b"\r\n")
+    data = [d for idx, d in enumerate(data) if idx % 2 == 1]
+    return b"".join(data)
 
 
 def decompress(data, encoding):
