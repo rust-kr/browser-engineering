@@ -1,6 +1,7 @@
 import gzip
 import socket
 import ssl
+import sys
 import zlib
 
 try:
@@ -40,11 +41,17 @@ def request(url):
 
 def _get_headers_and_body(sock, host, port, path):
     sock.connect((host, port))
+    accept_encoding = ["gzip", "deflate"]
+    if brotli:
+        accept_encoding.append("br")
+    accept_encoding = ",".join(accept_encoding)
 
     # 5. Send request
-    sock.send(f"GET {path} HTTP/1.0\r\n".encode())
+    sock.send(f"GET {path} HTTP/1.1\r\n".encode())
     sock.send(f"Host: {host}\r\n".encode())
-    sock.send("Accept-Encoding: br,gzip,deflate\r\n".encode())
+    sock.send(f"Connection: close\r\n".encode())
+    sock.send(f"User-Agent: Mozilla/5.0 ({sys.platform})\r\n".encode())
+    sock.send(f"Accept-Encoding: {accept_encoding}\r\n".encode())
     sock.send("\r\n".encode())
 
     # 6. Receive response
@@ -63,11 +70,18 @@ def _get_headers_and_body(sock, host, port, path):
             line = response.readline().decode()
             if line == "\r\n":
                 break
-
             header, value = line.split(":", 1)
             headers[header.lower()] = value.strip()
 
-        body = response.read()
+        if "transfer-encoding" in headers:
+            encoding = headers["transfer-encoding"]
+            if encoding == "chunked":
+                body = unchunked(response)
+            else:
+                raise RuntimeError(f"Unsupported transfer-encoding: {encoding}")
+        else:
+            body = response.read()
+
         if "content-encoding" in headers:
             encoding = headers["content-encoding"]
             body = decompress(body, encoding)
@@ -75,6 +89,23 @@ def _get_headers_and_body(sock, host, port, path):
         body = body.decode()
         # 12. Return
         return headers, body
+
+
+def unchunked(response):
+    ret = b""
+
+    def get_chunk_size():
+        chunk_size = response.readline().rstrip()
+        return int(chunk_size, 16)
+
+    while True:
+        chunk_size = get_chunk_size()
+        if chunk_size == 0:
+            break
+        else:
+            ret += response.read(chunk_size)
+            response.read(2)
+    return ret
 
 
 def decompress(data, encoding):
