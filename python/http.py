@@ -77,6 +77,8 @@ def _get_headers_and_body(sock, host, port, path):
             encoding = headers["transfer-encoding"]
             if encoding == "chunked":
                 body = unchunked(response)
+            else:
+                raise RuntimeError(f"Unsupported transfer-encoding: {encoding}")
         else:
             body = response.read()
 
