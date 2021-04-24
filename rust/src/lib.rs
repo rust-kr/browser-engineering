@@ -252,19 +252,31 @@ pub mod http {
     pub fn lex(body: &[u8]) -> String {
         // 13. Print content
         let mut in_angle = false;
-        let mut ret = String::new();
+        let mut in_body_tag = false;
+        let mut out = String::new();
+        let mut tag = String::new();
         for c in body {
             match *c {
                 b'<' => in_angle = true,
-                b'>' => in_angle = false,
+                b'>' => {
+                    in_angle = false;
+                    match tag.as_str() {
+                        "body" => in_body_tag = true,
+                        "/body" => in_body_tag = false,
+                        _ => (),
+                    }
+                    tag = String::new();
+                }
                 _ => {
-                    if !in_angle {
-                        ret.push(*c as char);
+                    if in_angle {
+                        tag.push(*c as char);
+                    } else if in_body_tag {
+                        out.push(*c as char);
                     }
                 }
             }
         }
-        ret
+        out
     }
 }
 
