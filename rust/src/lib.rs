@@ -167,13 +167,12 @@ pub mod http {
         // 5. Send request
         write!(
             stream,
-            "GET {} HTTP/1.1\r
-Host: {}\r
-Connction: close\r
-User-Agent: Mozilla/5.0 ({})\r
-Accept-Encoding: gzip,deflate\r
-\r
-",
+            "GET {} HTTP/1.1\r\n\
+            Host: {}\r\n\
+            Connction: close\r\n\
+            User-Agent: Mozilla/5.0 ({})\r\n\
+            Accept-Encoding: gzip,deflate\r\n\
+            \r\n",
             path,
             host,
             env::consts::OS
