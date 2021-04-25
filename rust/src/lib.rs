@@ -220,6 +220,7 @@ Accept-Encoding: gzip,deflate\r
             None => ContentEncoding::Identity,
         };
 
+        // 11. Read body
         let body = match headers.get("transfer-encoding") {
             Some(encoding) => {
                 let mut unchunked = Vec::new();
@@ -229,7 +230,7 @@ Accept-Encoding: gzip,deflate\r
                         reader
                             .read_line(&mut line)
                             .map_err(|_| MALFORMED_RESPONSE)?;
-                        let n_bytes = i64::from_str_radix(line.trim_end(), 16).unwrap_or(0);
+                        let n_bytes = u64::from_str_radix(line.trim_end(), 16).unwrap_or(0);
                         if n_bytes == 0 {
                             break;
                         }
