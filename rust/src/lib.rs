@@ -205,6 +205,7 @@ pub mod http {
         };
 
         // 11. Read body
+        // TODO(corona10): Implement ChunkedReader
         let mut unchunked; // for chunked
         let mut reader = match headers.get("transfer-encoding") {
             Some(encoding) => {
