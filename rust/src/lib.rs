@@ -1,5 +1,6 @@
 pub mod http {
     use std::collections::HashMap;
+    use std::env;
     use std::io::{self, BufRead, BufReader, Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
@@ -90,6 +91,19 @@ pub mod http {
         Some((split.next()?, split.next()?))
     }
 
+    fn decompressor<'a, R: BufRead + 'a>(
+        reader: R,
+        encoding: ContentEncoding,
+    ) -> Box<dyn Read + 'a> {
+        use ContentEncoding::*;
+        match encoding {
+            Gzip => Box::new(GzDecoder::new(reader)),
+            Deflate => Box::new(DeflateDecoder::new(reader)),
+            Identity => Box::new(reader),
+            _ => unimplemented!(),
+        }
+    }
+
     pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), &'static str> {
         // 1. Parse scheme
         let (scheme, url) = split2(url, ":").unwrap_or(("https", url));
@@ -138,12 +152,15 @@ pub mod http {
         // 5. Send request
         write!(
             stream,
-            "GET {} HTTP/1.0\r
-Host: {}\r
-Accept-Encoding: gzip,deflate\r
-\r
-",
-            path, host
+            "GET {} HTTP/1.1\r\n\
+            Host: {}\r\n\
+            Connction: close\r\n\
+            User-Agent: Mozilla/5.0 ({})\r\n\
+            Accept-Encoding: gzip,deflate\r\n\
+            \r\n",
+            path,
+            host,
+            env::consts::OS
         )
         .map_err(|_| CONNECTION_ERROR)?;
 
@@ -168,7 +185,6 @@ Accept-Encoding: gzip,deflate\r
 
         // 10. Parse headers
         let mut headers = HashMap::new();
-        let mut encoding = ContentEncoding::Identity;
         loop {
             line.clear();
             reader
@@ -180,34 +196,53 @@ Accept-Encoding: gzip,deflate\r
             let (header, value) = split2(&line, ":").ok_or(MALFORMED_RESPONSE)?;
             let header = header.to_ascii_lowercase();
             let value = value.trim();
-            if header == "content-encoding" {
-                encoding = value.parse().map_err(|_| UNSUPPORTED_ENCODING)?;
-            }
             headers.insert(header, value.to_string());
         }
 
+        let content_encoding: ContentEncoding = match headers.get("content-encoding") {
+            Some(encoding) => encoding.parse().map_err(|_| UNSUPPORTED_ENCODING)?,
+            None => ContentEncoding::Identity,
+        };
+
         // 11. Read body
-        let mut body = Vec::new();
-        match encoding {
-            ContentEncoding::Gzip => {
-                GzDecoder::new(reader)
-                    .read_to_end(&mut body)
-                    .map_err(|_| MALFORMED_RESPONSE)?;
+        // TODO(corona10): Implement ChunkedReader
+        let mut unchunked; // for chunked
+        let mut reader = match headers.get("transfer-encoding") {
+            Some(encoding) => {
+                unchunked = Vec::new();
+                if "chunked".eq_ignore_ascii_case(encoding) {
+                    loop {
+                        let mut line = String::new();
+                        reader
+                            .read_line(&mut line)
+                            .map_err(|_| MALFORMED_RESPONSE)?;
+                        let n_bytes = u64::from_str_radix(line.trim_end(), 16).unwrap_or(0);
+                        if n_bytes == 0 {
+                            break;
+                        }
+                        let mut chunk = vec![0u8; n_bytes as usize];
+                        reader
+                            .read_exact(&mut chunk)
+                            .map_err(|_| MALFORMED_RESPONSE)?;
+                        reader.read_exact(&mut vec![0u8; 2]).unwrap();
+                        unchunked.write_all(&chunk).unwrap();
+                    }
+                } else {
+                    unimplemented!()
+                }
+                decompressor(BufReader::new(unchunked.as_slice()), content_encoding)
             }
-            ContentEncoding::Deflate => {
-                DeflateDecoder::new(reader)
-                    .read_to_end(&mut body)
-                    .map_err(|_| MALFORMED_RESPONSE)?;
-            }
-            ContentEncoding::Identity => {
-                reader
-                    .read_to_end(&mut body)
-                    .map_err(|_| MALFORMED_RESPONSE)?;
-            }
-            _ => {
-                panic!("{}", UNSUPPORTED_ENCODING);
-            }
-        }
+            None => decompressor(BufReader::new(reader), content_encoding),
+        };
+        let body = {
+            let mut body = Vec::new();
+            reader
+                .read_to_end(&mut body)
+                .map_err(|_| MALFORMED_RESPONSE)
+                .unwrap();
+            body
+        };
+
         // In Rust, connection is closed when stream is dropped
 
         // 12. Return
@@ -360,5 +395,40 @@ pub mod display {
                 ctx.draw_text(&layout, (ch.x as f64, ch.y as f64 - self.scroll as f64));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_http_request() -> Result<(), String> {
+        let http_sites = vec!["http://www.google.com/", "http://example.com/"];
+        for site in http_sites {
+            let (header, body) = http::request(site).unwrap();
+            assert_eq!(header.contains_key("content-type"), true);
+            assert_eq!(body.len() > 0, true);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_https_request() -> Result<(), String> {
+        let https_sites = vec!["https://www.google.com/", "https://example.com/"];
+        for site in https_sites {
+            let (header, body) = http::request(site).unwrap();
+            assert_eq!(header.contains_key("content-type"), true);
+            assert_eq!(body.len() > 0, true);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_data_request() -> Result<(), String> {
+        let (header, body) = http::request("data:text/html,Hello world").unwrap();
+        assert_eq!(header.get("content-type").unwrap(), "text/html");
+        assert_eq!(std::str::from_utf8(&body).unwrap(), "Hello world");
+        Ok(())
     }
 }
