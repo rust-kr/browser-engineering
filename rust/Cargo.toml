@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2018"
 authors = [
   "Seo Sanghyeon <sanxiyn@gmail.com>",
-  "Dong-hee Na <donghee.na92@gmail.com",
+  "Dong-hee Na <donghee.na92@gmail.com>",
+  "Yi Hyunjoon <yi.hyunjoon@gmail.com>",
 ]
 
 [lib]
