@@ -91,32 +91,17 @@ pub mod http {
         Some((split.next()?, split.next()?))
     }
 
-    fn decompress<R: Read>(reader: &mut BufReader<R>, encoding: ContentEncoding) -> Vec<u8> {
-        let mut body = Vec::new();
+    fn decompressor<'a, R: BufRead + 'a>(
+        reader: R,
+        encoding: ContentEncoding,
+    ) -> Box<dyn Read + 'a> {
+        use ContentEncoding::*;
         match encoding {
-            ContentEncoding::Gzip => {
-                GzDecoder::new(reader)
-                    .read_to_end(&mut body)
-                    .map_err(|_| MALFORMED_RESPONSE)
-                    .unwrap();
-            }
-            ContentEncoding::Deflate => {
-                DeflateDecoder::new(reader)
-                    .read_to_end(&mut body)
-                    .map_err(|_| MALFORMED_RESPONSE)
-                    .unwrap();
-            }
-            ContentEncoding::Identity => {
-                reader
-                    .read_to_end(&mut body)
-                    .map_err(|_| MALFORMED_RESPONSE)
-                    .unwrap();
-            }
-            _ => {
-                panic!("{}", UNSUPPORTED_ENCODING);
-            }
+            Gzip => Box::new(GzDecoder::new(reader)),
+            Deflate => Box::new(DeflateDecoder::new(reader)),
+            Identity => Box::new(reader),
+            _ => unimplemented!(),
         }
-        body
     }
 
     pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), &'static str> {
@@ -220,9 +205,10 @@ pub mod http {
         };
 
         // 11. Read body
-        let body = match headers.get("transfer-encoding") {
+        let mut unchunked; // for chunked
+        let mut reader = match headers.get("transfer-encoding") {
             Some(encoding) => {
-                let mut unchunked = Vec::new();
+                unchunked = Vec::new();
                 if "chunked".eq_ignore_ascii_case(encoding) {
                     loop {
                         let mut line = String::new();
@@ -243,9 +229,17 @@ pub mod http {
                 } else {
                     unimplemented!()
                 }
-                decompress(&mut BufReader::new(unchunked.as_slice()), content_encoding)
+                decompressor(BufReader::new(unchunked.as_slice()), content_encoding)
             }
-            None => decompress(&mut reader, content_encoding),
+            None => decompressor(BufReader::new(reader), content_encoding),
+        };
+        let body = {
+            let mut body = Vec::new();
+            reader
+                .read_to_end(&mut body)
+                .map_err(|_| MALFORMED_RESPONSE)
+                .unwrap();
+            body
         };
 
         // In Rust, connection is closed when stream is dropped
