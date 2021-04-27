@@ -1,6 +1,6 @@
 import unittest
 
-from http import request
+from http import request, lex
 
 
 class RequestTest(unittest.TestCase):
@@ -26,6 +26,11 @@ class RequestTest(unittest.TestCase):
         headers, body = request("data:text/html,Hello world")
         self.assertEqual(body, "Hello world")
         self.assertEqual(headers["content-type"], "text/html")
+
+    def test_lex(self):
+        origin = "<body key=value> test </BODY>"
+        ret = lex(origin)
+        self.assertEqual(ret, " test ")
 
 
 if __name__ == "__main__":

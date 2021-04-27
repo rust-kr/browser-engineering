@@ -124,6 +124,18 @@ def decompress(data, encoding):
 
 
 def lex(body):
+    # TODO: Will be removed in future course.
+    def get_body(origin):
+        import re
+
+        body_re = r"<\s*body.*?>([\s\S]*)<\s*\/body\s?>"
+        m = re.search(body_re, origin, flags=re.MULTILINE)
+        if not m:
+            return origin
+        return m.group()
+
+    # TODO: This logic will be removed in future course.
+    body = get_body(body)
     text = ""
     in_angle = False
     for c in body:
