@@ -6,6 +6,7 @@ pub mod http {
     use std::sync::Arc;
 
     use flate2::bufread::{DeflateDecoder, GzDecoder};
+    use regex::bytes::Regex;
     use rustls::{ClientConfig, ClientSession, StreamOwned};
     use webpki::DNSNameRef;
 
@@ -250,27 +251,23 @@ pub mod http {
     }
 
     pub fn lex(body: &[u8]) -> String {
+        fn get_body(origin: &[u8]) -> &[u8] {
+            let body_re = Regex::new(r"<\s*body.*?>([\s\S]*)<\s*/body\s?>").unwrap();
+            match body_re.find(origin) {
+                Some(m) => &origin[m.start()..m.end()],
+                None => origin,
+            }
+        }
         // 13. Print content
         let mut in_angle = false;
-        let mut in_body_tag = false;
         let mut out = String::new();
-        let mut tag = String::new();
+        let body = get_body(body);
         for c in body {
             match *c {
                 b'<' => in_angle = true,
-                b'>' => {
-                    in_angle = false;
-                    match tag.as_str() {
-                        "body" => in_body_tag = true,
-                        "/body" => in_body_tag = false,
-                        _ => (),
-                    }
-                    tag = String::new();
-                }
+                b'>' => in_angle = false,
                 _ => {
-                    if in_angle {
-                        tag.push(*c as char);
-                    } else if in_body_tag {
+                    if !in_angle {
                         out.push(*c as char);
                     }
                 }
@@ -441,6 +438,13 @@ mod tests {
         let (header, body) = http::request("data:text/html,Hello world").unwrap();
         assert_eq!(header.get("content-type").unwrap(), "text/html");
         assert_eq!(std::str::from_utf8(&body).unwrap(), "Hello world");
+        Ok(())
+    }
+
+    #[test]
+    fn test_lex() -> Result<(), String> {
+        let origin = "<body key=value> test </BODY>";
+        assert_eq!(http::lex(origin.as_bytes()), " test ");
         Ok(())
     }
 }
