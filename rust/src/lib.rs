@@ -105,7 +105,7 @@ pub mod http {
         }
     }
 
-    pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), &'static str> {
+    pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), String> {
         // 1. Parse scheme
         let (scheme, url) = split2(url, ":").unwrap_or(("https", url));
         let default_port = match scheme {
@@ -260,7 +260,7 @@ pub mod http {
         }
         // 13. Print content
         let mut in_angle = false;
-        let mut out = String::new();
+        let mut out: Vec<u8> = Vec::new();
         let body = get_body(body);
         for c in body {
             match *c {
@@ -268,12 +268,12 @@ pub mod http {
                 b'>' => in_angle = false,
                 _ => {
                     if !in_angle {
-                        out.push(*c as char);
+                        out.push(*c);
                     }
                 }
             }
         }
-        out
+        String::from_utf8(out).expect("utf-8 website is expected")
     }
 }
 
