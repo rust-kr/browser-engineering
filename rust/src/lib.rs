@@ -200,9 +200,8 @@ pub mod http {
             headers.insert(header, value.to_string());
         }
 
-        let redirect = headers.get("location").map(|url| request(url));
-        if redirect.is_some() {
-            return redirect.unwrap();
+        if let Some(redirect) = headers.get("location").map(|url| request(url)) {
+            return redirect;
         }
 
         let content_encoding: ContentEncoding = match headers.get("content-encoding") {
@@ -461,8 +460,8 @@ mod tests {
         ];
         for site in redirect_sites {
             let (header, body) = http::request(site).unwrap();
-            assert_eq!(header.contains_key("content-type"), true);
-            assert_eq!(body.len() > 0, true);
+            assert!(header.contains_key("content-type"));
+            assert!(!body.is_empty());
         }
         Ok(())
     }
