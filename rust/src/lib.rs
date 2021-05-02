@@ -200,8 +200,8 @@ pub mod http {
             headers.insert(header, value.to_string());
         }
 
-        if let Some(redirect) = headers.get("location").map(|url| request(url)) {
-            return redirect;
+        if let Some(url) = headers.get("location") {
+            return request(url);
         }
 
         let content_encoding: ContentEncoding = match headers.get("content-encoding") {
