@@ -180,7 +180,7 @@ pub mod http {
 
         // 9. Check status
         match status {
-            "200" | "301" => (),
+            "200" | "301" | "302" => (),
             _ => panic!("{}: {}", status, explanation),
         };
 
@@ -200,16 +200,9 @@ pub mod http {
             headers.insert(header, value.to_string());
         }
 
-        let redirect = match headers.get("location") {
-            Some(url) => {
-                let (headers, body) = request(url).unwrap();
-                Some((headers, body))
-            }
-            None => None,
-        };
-
+        let redirect = headers.get("location").map(|url| request(url));
         if redirect.is_some() {
-            return Ok(redirect.unwrap());
+            return redirect.unwrap();
         }
 
         let content_encoding: ContentEncoding = match headers.get("content-encoding") {
@@ -457,6 +450,20 @@ mod tests {
     fn test_lex() -> Result<(), String> {
         let origin = "<body key=value> test </BODY>";
         assert_eq!(http::lex(origin.as_bytes()), " test ");
+        Ok(())
+    }
+
+    #[test]
+    fn test_redirect() -> Result<(), String> {
+        let redirect_sites = vec![
+            "http://www.naver.com/",
+            "http://browser.engineering/redirect",
+        ];
+        for site in redirect_sites {
+            let (header, body) = http::request(site).unwrap();
+            assert_eq!(header.contains_key("content-type"), true);
+            assert_eq!(body.len() > 0, true);
+        }
         Ok(())
     }
 }
