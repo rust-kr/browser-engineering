@@ -273,7 +273,7 @@ pub mod http {
                 }
             }
         }
-        String::from_utf8(out).unwrap()
+        String::from_utf8(out).expect("utf-8 website is expected")
     }
 }
 
