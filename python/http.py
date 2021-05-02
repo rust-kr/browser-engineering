@@ -62,7 +62,7 @@ def _get_headers_and_body(sock, host, port, path):
         version, status, explanation = line.split(" ", 2)
 
         # 9. Check status
-        assert status == "200" or status == "301" or status == "302", f"{status}: {explanation}"
+        assert status in ("200", "301", "302"), f"{status}: {explanation}"
 
         # 10. Parse headers
         headers = {}
