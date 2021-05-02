@@ -73,6 +73,9 @@ def _get_headers_and_body(sock, host, port, path):
             header, value = line.split(":", 1)
             headers[header.lower()] = value.strip()
 
+        if "location" in headers:
+            return request(headers["location"])
+
         if "transfer-encoding" in headers:
             encoding = headers["transfer-encoding"]
             if encoding == "chunked":

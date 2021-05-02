@@ -180,7 +180,7 @@ pub mod http {
 
         // 9. Check status
         match status {
-            "200" => (),
+            "200" | "301" => (),
             _ => panic!("{}: {}", status, explanation),
         };
 
@@ -198,6 +198,18 @@ pub mod http {
             let header = header.to_ascii_lowercase();
             let value = value.trim();
             headers.insert(header, value.to_string());
+        }
+
+        let redirect = match headers.get("location") {
+            Some(url) => {
+                let (headers, body) = request(url).unwrap();
+                Some((headers, body))
+            }
+            None => None,
+        };
+
+        if redirect.is_some() {
+            return Ok(redirect.unwrap());
         }
 
         let content_encoding: ContentEncoding = match headers.get("content-encoding") {
