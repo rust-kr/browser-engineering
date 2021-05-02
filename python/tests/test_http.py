@@ -35,7 +35,7 @@ class RequestTest(unittest.TestCase):
     def test_redirect(self):
         redirect_sites = [
             "http://www.naver.com/",
-            "http://browser.engineering/redirect"
+            "http://browser.engineering/redirect",
         ]
         for site in redirect_sites:
             headers, body = request(site)
