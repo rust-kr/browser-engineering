@@ -62,7 +62,7 @@ def _get_headers_and_body(sock, host, port, path):
         version, status, explanation = line.split(" ", 2)
 
         # 9. Check status
-        assert status == "200", f"{status}: {explanation}"
+        assert status in ("200", "301", "302"), f"{status}: {explanation}"
 
         # 10. Parse headers
         headers = {}
@@ -72,6 +72,9 @@ def _get_headers_and_body(sock, host, port, path):
                 break
             header, value = line.split(":", 1)
             headers[header.lower()] = value.strip()
+
+        if "location" in headers:
+            return request(headers["location"])
 
         if "transfer-encoding" in headers:
             encoding = headers["transfer-encoding"]

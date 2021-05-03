@@ -32,6 +32,16 @@ class RequestTest(unittest.TestCase):
         ret = lex(origin)
         self.assertEqual(ret, " test ")
 
+    def test_redirect(self):
+        redirect_sites = [
+            "http://www.naver.com/",
+            "http://browser.engineering/redirect",
+        ]
+        for site in redirect_sites:
+            headers, body = request(site)
+            self.assertGreater(len(body), 0)
+            self.assertIn("content-type", headers)
+
 
 if __name__ == "__main__":
     unittest.main()
