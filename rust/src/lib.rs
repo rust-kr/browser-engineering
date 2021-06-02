@@ -1,9 +1,9 @@
 pub mod http {
     use std::collections::HashMap;
-    use std::str;
     use std::env;
     use std::io::{self, BufRead, BufReader, Read, Write};
     use std::net::TcpStream;
+    use std::str;
     use std::sync::Arc;
 
     use flate2::bufread::{DeflateDecoder, GzDecoder};
@@ -284,18 +284,16 @@ pub mod http {
                     match sign {
                         "lt" => out.push(b'<'),
                         "gt" => out.push(b'>'),
-                        _ => {},
+                        _ => {}
                     }
                     escape = Vec::new();
                     state = LexState::Text;
-                },
-                _ => {
-                    match state {
-                        LexState::Text => out.push(*c),
-                        LexState::Escape => escape.push(*c),
-                        LexState::Angle => {},
-                    }
                 }
+                _ => match state {
+                    LexState::Text => out.push(*c),
+                    LexState::Escape => escape.push(*c),
+                    LexState::Angle => {}
+                },
             }
         }
         String::from_utf8(out).expect("utf-8 website is expected")

@@ -126,10 +126,12 @@ def decompress(data, encoding):
     else:
         raise RuntimeError(f"unexpected content-encoding: {encoding}")
 
+
 class LexState(Enum):
     TEXT = 0
     ANGLE = 1
     ESCAPE = 2
+
 
 def lex(body):
     # TODO: Will be removed in future course.
