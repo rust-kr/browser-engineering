@@ -1,6 +1,7 @@
 pub mod http {
     use std::collections::HashMap;
     use std::env;
+    use std::fmt;
     use std::io::{self, BufRead, BufReader, Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
@@ -9,12 +10,6 @@ pub mod http {
     use regex::bytes::Regex;
     use rustls::{ClientConfig, ClientSession, StreamOwned};
     use webpki::DNSNameRef;
-
-    const UNREACHABLE: &str = "Unreachable";
-    const MALFORMED_URL: &str = "Malformed URL";
-    const CONNECTION_ERROR: &str = "Connection error";
-    const MALFORMED_RESPONSE: &str = "Malformed response";
-    const UNSUPPORTED_ENCODING: &str = "Unsupported encoding";
 
     enum Stream {
         Tcp(TcpStream),
@@ -105,7 +100,38 @@ pub mod http {
         }
     }
 
-    pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), String> {
+    #[derive(Debug)]
+    pub enum RequestError {
+        Unreachable,
+        MalformedUrl,
+        UnknownScheme(String),
+        ConnectionError,
+        StatusError(String, String),
+        MalformedResponse,
+        UnsupportedEncoding,
+    }
+
+    impl fmt::Display for RequestError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                RequestError::Unreachable => f.write_str("Unreachable"),
+                RequestError::MalformedUrl => f.write_str("Malformed URL"),
+                RequestError::UnknownScheme(scheme) => {
+                    write!(f, "Unknown scheme: {}", scheme)
+                }
+                RequestError::ConnectionError => f.write_str("Connection error"),
+                RequestError::StatusError(status, reason) => {
+                    write!(f, "Status error: {} {}", status, reason)
+                }
+                RequestError::MalformedResponse => f.write_str("Malformed response"),
+                RequestError::UnsupportedEncoding => f.write_str("Unsupported encoding"),
+            }
+        }
+    }
+
+    impl std::error::Error for RequestError {}
+
+    pub fn request(url: &str) -> Result<(HashMap<String, String>, Vec<u8>), RequestError> {
         // 1. Parse scheme
         let (scheme, url) = split2(url, ":").unwrap_or(("https", url));
         let default_port = match scheme {
@@ -113,30 +139,30 @@ pub mod http {
             "https" => 443,
             "data" => {
                 // Exercise data scheme
-                let (content_type, body) = split2(url, ",").ok_or(MALFORMED_URL)?;
+                let (content_type, body) = split2(url, ",").ok_or(RequestError::MalformedUrl)?;
                 let mut headers = HashMap::new();
                 headers.insert("content-type".to_owned(), content_type.to_owned());
                 return Ok((headers, body.as_bytes().to_vec()));
             }
-            _ => panic!("Unknown scheme {}", scheme),
+            _ => return Err(RequestError::UnknownScheme(scheme.to_string())),
         };
         let url = url.strip_prefix("//").unwrap_or(url);
 
         // 2. Parse host
-        let (host, path) = split2(url, "/").ok_or(MALFORMED_URL)?;
+        let (host, path) = split2(url, "/").ok_or(RequestError::MalformedUrl)?;
         let path = format!("/{}", path);
 
         // 3. Parse port
         let (host, port) = if host.contains(':') {
-            let (host, port) = split2(host, ":").ok_or(UNREACHABLE)?;
-            let port = port.parse().map_err(|_| MALFORMED_URL)?;
+            let (host, port) = split2(host, ":").ok_or(RequestError::Unreachable)?;
+            let port = port.parse().or(Err(RequestError::MalformedUrl))?;
             (host, port)
         } else {
             (host, default_port)
         };
 
         // 4. Connect
-        let stream = TcpStream::connect((host, port)).map_err(|_| CONNECTION_ERROR)?;
+        let stream = TcpStream::connect((host, port)).or(Err(RequestError::ConnectionError))?;
         let mut stream = if scheme != "https" {
             Stream::Tcp(stream)
         } else {
@@ -144,7 +170,7 @@ pub mod http {
             config
                 .root_store
                 .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-            let host = DNSNameRef::try_from_ascii_str(host).map_err(|_| MALFORMED_URL)?;
+            let host = DNSNameRef::try_from_ascii_str(host).or(Err(RequestError::MalformedUrl))?;
             let client = ClientSession::new(&Arc::new(config), host);
             let stream = StreamOwned::new(client, stream);
             Stream::Tls(stream)
@@ -163,7 +189,7 @@ pub mod http {
             host,
             env::consts::OS
         )
-        .map_err(|_| CONNECTION_ERROR)?;
+        .or(Err(RequestError::ConnectionError))?;
 
         // 6. Receive response
         let mut reader = BufReader::new(stream);
@@ -172,16 +198,21 @@ pub mod http {
         let mut line = String::new();
         reader
             .read_line(&mut line)
-            .map_err(|_| MALFORMED_RESPONSE)?;
+            .or(Err(RequestError::MalformedResponse))?;
 
         // 8. Parse status line
-        let (_version, status) = split2(&line, " ").ok_or(MALFORMED_RESPONSE)?;
-        let (status, explanation) = split2(status, " ").ok_or(MALFORMED_RESPONSE)?;
+        let (_version, status) = split2(&line, " ").ok_or(RequestError::MalformedResponse)?;
+        let (status, explanation) = split2(status, " ").ok_or(RequestError::MalformedResponse)?;
 
         // 9. Check status
         match status {
             "200" | "301" | "302" => (),
-            _ => panic!("{}: {}", status, explanation),
+            _ => {
+                return Err(RequestError::StatusError(
+                    status.to_string(),
+                    explanation.to_string(),
+                ))
+            }
         };
 
         // 10. Parse headers
@@ -190,11 +221,11 @@ pub mod http {
             line.clear();
             reader
                 .read_line(&mut line)
-                .map_err(|_| MALFORMED_RESPONSE)?;
+                .or(Err(RequestError::MalformedResponse))?;
             if line == "\r\n" {
                 break;
             }
-            let (header, value) = split2(&line, ":").ok_or(MALFORMED_RESPONSE)?;
+            let (header, value) = split2(&line, ":").ok_or(RequestError::MalformedResponse)?;
             let header = header.to_ascii_lowercase();
             let value = value.trim();
             headers.insert(header, value.to_string());
@@ -205,7 +236,9 @@ pub mod http {
         }
 
         let content_encoding: ContentEncoding = match headers.get("content-encoding") {
-            Some(encoding) => encoding.parse().map_err(|_| UNSUPPORTED_ENCODING)?,
+            Some(encoding) => encoding
+                .parse()
+                .or(Err(RequestError::UnsupportedEncoding))?,
             None => ContentEncoding::Identity,
         };
 
@@ -220,7 +253,7 @@ pub mod http {
                         let mut line = String::new();
                         reader
                             .read_line(&mut line)
-                            .map_err(|_| MALFORMED_RESPONSE)?;
+                            .or(Err(RequestError::MalformedResponse))?;
                         let n_bytes = u64::from_str_radix(line.trim_end(), 16).unwrap_or(0);
                         if n_bytes == 0 {
                             break;
@@ -228,7 +261,7 @@ pub mod http {
                         let mut chunk = vec![0u8; n_bytes as usize];
                         reader
                             .read_exact(&mut chunk)
-                            .map_err(|_| MALFORMED_RESPONSE)?;
+                            .or(Err(RequestError::MalformedResponse))?;
                         reader.read_exact(&mut vec![0u8; 2]).unwrap();
                         unchunked.write_all(&chunk).unwrap();
                     }
@@ -243,8 +276,7 @@ pub mod http {
             let mut body = Vec::new();
             reader
                 .read_to_end(&mut body)
-                .map_err(|_| MALFORMED_RESPONSE)
-                .unwrap();
+                .or(Err(RequestError::MalformedResponse))?;
             body
         };
 
