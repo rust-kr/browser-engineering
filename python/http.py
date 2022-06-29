@@ -3,6 +3,7 @@ import socket
 import ssl
 import sys
 import zlib
+from enum import Enum
 
 try:
     import brotli
@@ -126,6 +127,12 @@ def decompress(data, encoding):
         raise RuntimeError(f"unexpected content-encoding: {encoding}")
 
 
+class LexState(Enum):
+    TEXT = 0
+    ANGLE = 1
+    ESCAPE = 2
+
+
 def lex(body):
     # TODO: Will be removed in future course.
     def get_body(origin):
@@ -139,13 +146,24 @@ def lex(body):
 
     # TODO: This logic will be removed in future course.
     body = get_body(body)
-    text = ""
-    in_angle = False
+    text, escape = "", ""
+    state = LexState.TEXT
     for c in body:
         if c == "<":
-            in_angle = True
+            state = LexState.ANGLE
         elif c == ">":
-            in_angle = False
-        elif not in_angle:
+            state = LexState.TEXT
+        elif c == "&":
+            state = LexState.ESCAPE
+        elif c == ";":
+            state = LexState.TEXT
+            if escape == "lt":
+                text += "<"
+            elif escape == "gt":
+                text += ">"
+            escape = ""
+        elif state == LexState.ESCAPE:
+            escape += c
+        elif state == LexState.TEXT:
             text += c
     return text

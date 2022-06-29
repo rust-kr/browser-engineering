@@ -32,6 +32,11 @@ class RequestTest(unittest.TestCase):
         ret = lex(origin)
         self.assertEqual(ret, " test ")
 
+    def test_lex_with_escape(self):
+        origin = "&lt;div&gt;abc&lt;/div&gt;"
+        ret = lex(origin)
+        self.assertEqual(ret, "<div>abc</div>")
+
     def test_redirect(self):
         redirect_sites = [
             "http://www.naver.com/",

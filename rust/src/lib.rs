@@ -4,6 +4,7 @@ pub mod http {
     use std::fmt;
     use std::io::{self, BufRead, BufReader, Read, Write};
     use std::net::TcpStream;
+    use std::str;
     use std::sync::Arc;
 
     use flate2::bufread::{DeflateDecoder, GzDecoder};
@@ -286,6 +287,12 @@ pub mod http {
         Ok((headers, body))
     }
 
+    enum LexState {
+        Text,
+        Angle,
+        Escape,
+    }
+
     pub fn lex(body: &[u8]) -> String {
         fn get_body(origin: &[u8]) -> &[u8] {
             let body_re = Regex::new(r"<\s*body.*?>([\s\S]*)<\s*/body\s?>").unwrap();
@@ -295,18 +302,30 @@ pub mod http {
             }
         }
         // 13. Print content
-        let mut in_angle = false;
+        let mut state = LexState::Text;
         let mut out: Vec<u8> = Vec::new();
+        let mut escape: Vec<u8> = Vec::new();
         let body = get_body(body);
         for c in body {
             match *c {
-                b'<' => in_angle = true,
-                b'>' => in_angle = false,
-                _ => {
-                    if !in_angle {
-                        out.push(*c);
+                b'<' => state = LexState::Angle,
+                b'>' => state = LexState::Text,
+                b'&' => state = LexState::Escape,
+                b';' => {
+                    let sign = str::from_utf8(&escape).unwrap();
+                    match sign {
+                        "lt" => out.push(b'<'),
+                        "gt" => out.push(b'>'),
+                        _ => {}
                     }
+                    escape = Vec::new();
+                    state = LexState::Text;
                 }
+                _ => match state {
+                    LexState::Text => out.push(*c),
+                    LexState::Escape => escape.push(*c),
+                    LexState::Angle => {}
+                },
             }
         }
         String::from_utf8(out).expect("utf-8 website is expected")
@@ -481,6 +500,13 @@ mod tests {
     fn test_lex() -> Result<(), String> {
         let origin = "<body key=value> test </BODY>";
         assert_eq!(http::lex(origin.as_bytes()), " test ");
+        Ok(())
+    }
+
+    #[test]
+    fn test_lex_with_escape() -> Result<(), String> {
+        let origin = "&lt;div&gt;abc&lt;/div&gt;";
+        assert_eq!(http::lex(origin.as_bytes()), "<div>abc</div>");
         Ok(())
     }
 
